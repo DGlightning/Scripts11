@@ -375,9 +375,9 @@ if not Mobile then
 
     function library:window(properties)
         local cfg = { 
-            suffix = properties.suffix or properties.Suffix or "tech";
-            name = properties.name or properties.Name or "nebula";
-            game_name = properties.gameInfo or properties.game_info or properties.GameInfo or "UI Framework Template";
+            suffix = properties.suffix or properties.Suffix or "hub";
+            name = properties.name or properties.Name or "corpse";
+            game_name = properties.gameInfo or properties.game_info or properties.GameInfo or "Corpse Hub Premium";
             size = properties.size or properties.Size or dim2(0, 700, 0, 565);
             selected_tab;
             items = {};
@@ -565,18 +565,4 @@ if not Mobile then
                 Position = dim2(0, 10, 0.5, -1);
                 BackgroundTransparency = 1;
                 TextXAlignment = Enum.TextXAlignment.Left;
-                BorderSizePixel = 0;
-                AutomaticSize = Enum.AutomaticSize.XY;
-                TextSize = 14;
-                BackgroundColor3 = rgb(255, 255, 255)
-            }); 
-        end 
-
-        do 
-            library:draggify(items[ "main" ])
-            library:resizify(items[ "main" ])
-        end 
-            
-        return setmetatable(cfg, library)
-    end 
-end
+                BorderSizePixel = 
