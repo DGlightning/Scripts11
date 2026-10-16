@@ -86,6 +86,10 @@ local SETTINGS = {
     sideGapCommitTime = 0.8,
     sideGapForwardBias = 6.5,
 
+    flyEnabled = false,
+    flySpeed = 50,
+    noclipEnabled = false,
+
     catcherChase = true,
     catcherCustomSpeed = false,
     catcherSpeedMultiplier = 1.0,
@@ -254,6 +258,8 @@ local runtime = {
     debugPanelAt = -math.huge,
     journeyNextClaimAt = -math.huge,
     journeyManualPending = false,
+    flyBodyGyro = nil,
+    flyBodyVelocity = nil,
 }
 
 local safezone = {
@@ -355,6 +361,81 @@ local function canMove()
         return false
     end
     return true
+end
+
+local function stopFly()
+    if runtime.flyBodyVelocity then
+        pcall(function() runtime.flyBodyVelocity:Destroy() end)
+        runtime.flyBodyVelocity = nil
+    end
+    if runtime.flyBodyGyro then
+        pcall(function() runtime.flyBodyGyro:Destroy() end)
+        runtime.flyBodyGyro = nil
+    end
+    local hum = getHumanoid()
+    if hum then
+        hum.PlatformStand = false
+    end
+end
+
+local function updateFlyStep()
+    if not SETTINGS.flyEnabled then
+        stopFly()
+        return
+    end
+
+    local root = getRoot()
+    local hum = getHumanoid()
+    if not root or not hum or hum.Health <= 0 then
+        stopFly()
+        return
+    end
+
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+
+    if not runtime.flyBodyVelocity or runtime.flyBodyVelocity.Parent ~= root then
+        stopFly()
+        local bg = Instance.new("BodyGyro")
+        bg.P = 9e4
+        bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bg.cframe = root.CFrame
+        bg.Parent = root
+        runtime.flyBodyGyro = bg
+
+        local bv = Instance.new("BodyVelocity")
+        bv.velocity = Vector3.zero
+        bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        bv.Parent = root
+        runtime.flyBodyVelocity = bv
+    end
+
+    hum.PlatformStand = true
+
+    local moveDir = hum.MoveDirection
+    local flyVel = Vector3.zero
+
+    if moveDir.Magnitude > 0.05 then
+        local camCF = camera.CFrame
+        local flyDirection = (camCF.RightVector * moveDir.X + camCF.LookVector * (-moveDir.Z))
+        if flyDirection.Magnitude > 0.05 then
+            flyVel = flyDirection.Unit * SETTINGS.flySpeed
+        end
+    end
+
+    runtime.flyBodyVelocity.velocity = flyVel
+    runtime.flyBodyGyro.cframe = camera.CFrame
+end
+
+local function updateNoclipStep()
+    if not SETTINGS.noclipEnabled then return end
+    local character = getCharacter()
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.CanCollide then
+            part.CanCollide = false
+        end
+    end
 end
 
 local function getBaseSpeed(role)
@@ -3766,6 +3847,7 @@ RescueEvent.OnClientEvent:Connect(function(kind, id)
 end)
 
 LocalPlayer.CharacterAdded:Connect(function()
+    stopFly()
     runtime.profile = nil
     runtime.profileRole = nil
     runtime.lastMovePosition = nil
@@ -4111,6 +4193,43 @@ RunnerTab:Slider({
     end,
 })
 
+RunnerTab:Section({Title = "Abilities & Movement Extras"})
+
+RunnerTab:Toggle({
+    Title = "Fly",
+    Desc = "Allows your character to fly freely in camera direction.",
+    Icon = "plane",
+    Type = "Checkbox",
+    Value = false,
+    Callback = function(v)
+        SETTINGS.flyEnabled = v == true
+        if not SETTINGS.flyEnabled then
+            stopFly()
+        end
+    end,
+})
+
+RunnerTab:Slider({
+    Title = "Fly Speed",
+    Desc = "Adjust how fast you fly.",
+    Step = 5,
+    Value = {Min = 10, Max = 200, Default = 50},
+    Callback = function(v)
+        SETTINGS.flySpeed = math.clamp(tonumber(v) or 50, 10, 200)
+    end,
+})
+
+RunnerTab:Toggle({
+    Title = "Noclip",
+    Desc = "Allows your character to pass through all walls and obstacles.",
+    Icon = "ghost",
+    Type = "Checkbox",
+    Value = false,
+    Callback = function(v)
+        SETTINGS.noclipEnabled = v == true
+    end,
+})
+
 RunnerTab:Section({Title = "Collection and Safety"})
 
 RunnerTab:Toggle({
@@ -4180,7 +4299,7 @@ RunnerTab:Slider({
     end,
 })
 
-RunnerTab:Section({Title = "Movement"})
+RunnerTab:Section({Title = "Movement Adjustments"})
 
 RunnerTab:Toggle({
     Title = "Smooth Direction Changes",
@@ -5327,6 +5446,10 @@ RunService:UnbindFromRenderStep(RENDER_NAME)
 
 RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Input.Value, function(dt)
     local now = os.clock()
+
+    pcall(updateFlyStep)
+    pcall(updateNoclipStep)
+
     local ok, err = pcall(runnerStep, now, dt)
     if not ok then
         setDebugError("Runner: " .. tostring(err))
@@ -5370,6 +5493,7 @@ Hub.cleanup = function()
         end
     end
 
+    stopFly()
     pcall(cancelRevive)
     pcall(function() RunService:UnbindFromRenderStep(RENDER_NAME) end)
     pcall(function() RunService:UnbindFromRenderStep(SPEED_RENDER_NAME) end)
